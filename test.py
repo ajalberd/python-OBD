@@ -14,13 +14,17 @@ response = connection.query(cmd) # send the command, and parse the response
 
 #print(response.value) # returns unit-bearing values thanks to Pint
 #print(response.value.to("mph")) # user-friendly unit conversions
-f = open("output.txt","w+")
+def reverse(s):
+  str = ""
+  for i in s:
+    str = i + str
+  return str
 while(True):
 	time.sleep(0.8)
 	rpm = connection.query(obd.commands.RPM).value.magnitude
 	print(rpm)
 	rpms= str(rpm)
+	rpms = reverse(rpms)
 	output = 'python3 display.py'
 	output = output + ' ' + rpms
 	os.system(output)
-	

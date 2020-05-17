@@ -2,60 +2,88 @@ import obd
 import sys
 import os
 import time
+import math
+import subprocess
 #obd.logger.setLevel(obd.logging.DEBUG)
-from multiprocessing.connection import Listener
-
-address = ('127.0.0.1', 6000)     # family is deduced to be 'AF_INET'
-listener = Listener(address)
-conn = listener.accept()
-print("listener accepted")
-
 from threading import *
 
 ports = obd.scan_serial()
-print (ports)
+#print (ports)
 connection = obd.OBD(fast=True, timeout=30, check_voltage=False) # auto-connects to USB or RF port
 
 cmd = obd.commands.SPEED # select an OBD command (sensor)
 
-#response = connection.query(cmd) # send the command, and parse the response
+response = connection.query(cmd) # send the command, and parse the response
 
 #print(response.value) # returns unit-bearing values thanks to Pint
 #print(response.value.to("mph")) # user-friendly unit conversions
 screen_lock = Semaphore(value=1)
+speed = 0
+rpm = 0
+middle = ""
+msg = ""
+
+#rpmarr = [6786,5554,3334,6753,3256]
+#speedarr = [20,30,40,60,80]
 
 def speedandrpm():
-	while(True):
-		time.sleep(0.8)
-		screen_lock.acquire()
-		rpm = connection.query(obd.commands.RPM).value.magnitude
-		print(rpm)
-		speed = connection.query(cmd)
-		screen_lock.release()
-		print(speed)
-def voicerec():
-	while(True):
-		msg = conn.recv() #Recieve the message from porcupine...
-		if msg == 'picovoice':
-			print("Fuel level is: " + str(connection.query(obd.commands.FUEL_LEVEL).value))
-			#break
-		elif msg == 'porcupine':
-			print("Runtime is: " + str(connection.query(obd.commands.RUN_TIME).value))
-			#break
-		#listener.close()
-	#rpms= str(rpm)
-	#rpms = reverse(rpms)
-	#output = 'python3 display.py'
-	#output = output + ' ' + rpms
-	#os.system(output)
+    global speed
+    global rpm
+    while(True):
+        time.sleep(0.2)
+        screen_lock.acquire()
+        try:
+            rpm = int(connection.query(obd.commands.RPM).value.magnitude)
+            print(rpm)
+            speed = int(connection.query(cmd).value.magnitude)
+        except:
+            print('RPM, Speed read error')
+        screen_lock.release()
+        print(speed)
 
+def voicerec():
+    #time.sleep(10)
+    global middle
+    global msg
+    while(True):
+        msg = porcupineproc.stdout.readline().rstrip('\n')
+        if msg == 'picovoice':
+            print('picovoice detected')
+            screen_lock.acquire()
+            middle = str(connection.query(obd.commands.FUEL_LEVEL).value.magnitude)
+            screen_lock.release()
+        elif msg == 'porcupine':
+            screen_lock.acquire()
+            middle = str(connection.query(obd.commands.RUN_TIME).value.magnitude)
+            screen_lock.release()
+        #process.poll()
+        print(middle)
+
+def runGUI():
+    time.sleep(20)
+    global speed
+    global rpm
+    global middle
+    while(True):
+        time.sleep(.1)
+        screen_lock.acquire()
+        val = str(speed)+','+str(rpm) + ',' + middle + '\n'
+        guiprocess.stdin.write(val)
+        screen_lock.release()
+        #print(val)
 
 t1 = Thread(target = speedandrpm)
+porcupineproc = subprocess.Popen(['python3', '../porcupine-pi/demo/python/porcupine_demo_mic.py', '--keywords=porcupine,picovoice','--input_audio_device_index', '3'], stdout=subprocess.PIPE, universal_newlines=True)
 t2 = Thread(target = voicerec)
-
-t1.start()
+guiprocess = subprocess.Popen(['python3', '../SeniorDesignGUI/GUI.py'], stdin=subprocess.PIPE, bufsize=1, universal_newlines=True, cwd='../SeniorDesignGUI/')
+t3 = Thread(target = runGUI)
 t2.start()
+t1.start()
+t3.start()
 
 
 
-listener.close()
+#listener.close()
+
+
+
